@@ -1,0 +1,5 @@
+com/mocoder/paymentterminal/service/PaymentServiceTest.class
+com/mocoder/paymentterminal/model/PaymentAttemptTest.class
+com/mocoder/paymentterminal/model/PaymentRequestTest.class
+com/mocoder/paymentterminal/model/AuthorisationHoldTest.class
+com/mocoder/paymentterminal/model/TerminalTest.class

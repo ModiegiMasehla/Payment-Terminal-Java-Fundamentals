@@ -1,0 +1,222 @@
+DO NOT CHANGE THE FORMAT -- DO NOT CREATE A NEW txt file
+
+=== Question 1.1 ===
+#Answer below
+Waterfall is a sequential model where the project goes through fixed phases: gather all requirements, design,
+build, test and release. Each phase must be finished before the next one starts, so changes of plan and
+problems found late are expensive, and the whole product is only tested together near the end.
+
+Agile (time-boxed) delivery splits the work into small slices that are designed, built, tested and shown
+in short iterations, so the team gets feedback often and can change priorities between iterations.
+
+A single shared trunk with continuous integration supports Agile because every developer commits small changes to
+the same line of code several times a day, and each commit is built and tested automatically. Problems from
+combining two people's work show up within hours, while the change is still small and fresh in the author's mind,
+and trunk always holds a working, releasable version that can be shown to the client at the end of every
+iteration. Long-lived feature branches work against this: each branch drifts away from the others, the combining
+of the work is postponed, and the merge at the end becomes a large, risky event that is exactly the
+"big merge before release" the team wants to avoid.
+Waterfall would make this worse, not better. Its phases are gated, so the work of all developers is only
+brought together and tested at the integration/testing phase near the end of the project, which is the point
+where the cost of conflicts and bugs is highest, and the QuickTap team would only find out whether the
+authorise and reverse parts fit together after months of separate work.
+
+=== Question 2.1 ===
+#Answer below
+A build script is a file of automated commands that builds, tests and packages a project the same way every time.
+Instead of a developer remembering and typing each step, the script describes them, and anyone (or any
+server) can run it with one command.
+
+It entails the repeatable tasks needed to turn source code into something that can be delivered: removing
+old build output (clean), downloading and managing dependencies, compiling the source, running the tests,
+and packaging the result, for example into a jar. These tasks belong in a script because they are repetitive and
+order-dependent, and typing them by hand leads to forgotten steps, typos, and different people running slightly
+different commands and getting different results.
+
+If a project can only be built inside one developer's IDE, the build depends on that person's machine: their
+IDE settings, installed plugins and hidden defaults. Other team members cannot reproduce it ("it works on my
+machine"), and a continuous integration server like QuickTap's, which has no IDE, cannot build it at all, so
+nothing can be checked automatically before a change lands on trunk. A build script makes the process explicit,
+version controlled together with the code, and repeatable on any machine.
+
+In Robot Worlds I used a Makefile whose targets wrapped the Maven commands, for example a build target that
+compiles the project, a test target that runs mvn test, a package target that produces the deployable jar, and a
+clean target that removes generated files. A teammate could run "make test" without knowing the Maven options
+and get the same checks as everyone else, and the same targets could be run by the pipeline. That is what
+made the team's builds consistent and reduced human error.
+
+=== Question 2.2 ===
+#Answer below
+Refactoring is improving the internal structure of existing code (making it easier to read, test and change)
+without changing its externally visible behaviour.
+
+The process is: before the change the code must already work and be covered by passing tests, so that there is
+a baseline that proves the current behaviour. During the change you work in small steps, one structural change at
+a time (for example extracting a method or renaming), and run the tests after each step so that any mistake is
+caught immediately. After the change the same tests must still pass, unmodified, which shows the behaviour is
+unchanged. If a test has to be changed, then behaviour has changed and it is no longer a pure refactor.
+
+A rewrite is different: it throws the old code away and writes new code, so behaviour may change in ways nobody
+has verified, it takes longer, and the old tests cannot be relied on to say what has been lost. Refactoring keeps
+the system working at every step.
+
+On a single shared trunk, every commit is immediately seen and built upon by everyone else, and trunk must stay
+working at all times. Large, risky restructures would break other people's work and cause big merge conflicts,
+so refactoring has to be done in small, frequent, test-protected commits. This keeps the code clean as it
+grows, keeps the commits easy to review and revert, and avoids the long-lived "refactoring branch" that is
+painful to merge.
+
+=== Question 2.3.1 ===
+#Answer below
+Static code analysis examines the source code without running it. It looks at the structure, for example
+syntax, style and coding standards, long methods, deep nesting, duplication, unused code, complexity, and
+some potential bugs or security problems that can be seen in the code. It can tell you whether the code is easy
+to read and maintain and where likely problem areas are, but it cannot tell you how the program actually behaves
+at runtime: it does not show real output for real inputs, performance, or problems that depend on data and
+timing.
+
+Behavioural (dynamic) code analysis examines the program while it is running, by executing it (with tests, or
+by running the application) and observing what it does. It can tell you whether the code produces the right
+results, crashes, how it responds to different inputs, how fast it is and how it uses memory. It cannot tell
+you about code that is never executed, it only covers the cases that were actually run, and it says nothing
+about how readable or maintainable the code is.
+
+The key difference is that static analysis inspects the code as text (what it is), whereas behavioural
+analysis inspects the code in execution (what it does).
+
+In this exercise, finding a method's structural problem by reading it is static analysis, because I am
+examining the structure without running anything: in PaymentService I found the long compound condition in
+canAuthorise and the deep nesting in evaluateReversal just by reading them. Running mvn test to confirm that
+nothing broke is behavioural analysis, because the tests execute the code and compare its actual behaviour with
+the expected behaviour. I used both: static to find the problems, behavioural to prove that my refactoring did not
+change the behaviour.
+
+=== Question 2.3.3 (Method 1) ===
+#Answer below
+Method: canAuthorise in src/main/java/com/wtc/paymentterminal/service/PaymentService.java.
+The original was an if statement with six conditions chained with && and || that returned true, followed by
+return false, which is a long, hard to read condition wrapped in a redundant if/return.
+I returned the boolean expression directly and split it into three well named methods (isTerminalReady,
+isWithinLimit and isCardUsable), where isCardUsable names its three parts with local variables (originAllowed,
+typeAccepted, notBlocked). The method now reads as a sentence, "the terminal is ready, the amount is within the
+limit and the card is usable", so the rule can be understood without decoding the brackets. Each rule can be
+changed or tested on its own, and the order of evaluation is the same as before. All 34 existing tests passed
+with mvn test before the refactor and passed again, unmodified, after it.
+
+=== Question 2.3.3 (Method 2) ===
+#Answer below
+Method: evaluateReversal in src/main/java/com/wtc/paymentterminal/service/PaymentService.java.
+The original had if / else blocks nested up to four levels deep, mixed two different checks (the timing of
+the reversal and the state of the authorisation holds) in one method, and repeated the nested logic inside a loop.
+I split it into checkReversalTiming and checkHolds (with checkHold for a single hold), and used guard clauses
+with early returns, so no method nests deeper than one level and evaluateReversal just calls the two checks and
+builds the result. The issue messages, their order and the behaviour for combined problems (a hold that is both
+mismatched and inactive still gives one message) are unchanged. Each check can now be read, tested and changed
+separately, and adding a new rule is one more small method rather than another nested level. All 34 existing
+tests passed before the refactor and passed again, unmodified, after it.
+
+=== Question 3.1 ===
+#Answer below
+Suite 1, which exercises the single method canAuthorise in isolation, is unit testing. Unit testing checks the
+smallest piece of code (a method or class) on its own, with no other classes involved (collaborators are faked
+if needed). It confirms that this method makes the right decision for each combination of inputs. The other two
+suites cannot confirm this precisely, because when they fail they do not say which method is wrong.
+It is written and run continuously during implementation.
+
+Suite 2, which runs the full authorise-capture-reverse flow end-to-end against a simulated bank gateway, is
+integration testing. Integration testing checks that two or more parts of the system work correctly together,
+for example the terminal, the payment service and the gateway. It confirms that the parts agree on how they
+talk to each other (messages, data, order of calls, failure handling), which unit tests cannot show because
+every unit can pass on its own and still not fit together. It happens once the units are connected, during and
+after implementation.
+
+Suite 3, which checks the finished terminal against the published card-message specification without knowing
+how it was built, is acceptance testing (black-box conformance testing). Acceptance testing checks the
+complete system from the outside against the requirements or specification. It confirms that the observable
+behaviour follows every rule in the specification, so that any other party that follows the same specification
+(a bank, another gateway) can work with the terminal, which neither unit nor integration tests prove, because they
+only check the team's own understanding of the design. It is done at the end of an iteration or just before release.
+
+=== Question 3.2 ===
+#Answer below
+In a test report I expect to see the number of tests run, and how many passed, failed, had errors or were
+skipped; the name of each test class and test with its time; the failure messages and stack traces; the total
+time taken; and whether the build ended in SUCCESS or FAILURE, usually with the date and time of the run.
+
+If the number of tests drops from 240 to 90 and everything still passes, "all tests passed" is much less
+trustworthy. It suggests that tests were deleted, disabled, skipped or no longer discovered (for example a
+test class was renamed, a module was excluded or the test configuration broke), so large parts of the code might
+no longer be checked at all. A report with all green and very few tests only proves that those few tests pass,
+not that the terminal software works, and a low count compared with the size of the codebase means big areas are
+untested, including whole types of tests such as integration or acceptance tests.
+
+Looking at reports over time, across several commits to trunk, shows trends that one report cannot: when the
+number of tests suddenly drops or the run time suddenly rises, which commit caused a test to start failing,
+whether some tests fail only now and then (flaky tests), and whether the test count and coverage grow as the
+code grows. Because a team on trunk commits many times a day, the history makes it easy to find the commit that
+broke something and fix it quickly, before others build on it.
+
+=== Question 4.1 ===
+#Answer below
+System design (software design) is the process of planning how a software system will be built: deciding its
+structure, its components (modules, classes, services), the responsibilities of each one, how they interact
+and exchange data, and how the system will meet its functional and non-functional requirements (such as
+reliability, security and performance), before or while it is implemented.
+
+It aims to turn the requirements into a clear plan, a blueprint, that developers can follow so that the system is
+built consistently and correctly; to reduce risk by finding problems and weak choices early, when they are
+cheap to change; and to make the system easier to understand, maintain, test and extend later, because the
+parts are well separated and their responsibilities are clear.
+
+=== Question 4.2 ===
+#Answer below
+A UML (Unified Modeling Language) diagram is a standard graphical notation used to describe, design and
+communicate the structure or behaviour of a software system so that everybody reads the drawing the same way.
+
+Class diagram: shows the static structure of the system, its classes with their attributes and methods, and the
+relationships between them (association, inheritance, dependency). It aims to show what the parts of the system
+are and how they are related. For example, it can show that a Terminal holds AuthorisationHold objects and that
+PaymentService uses Terminal and PaymentRequest.
+
+Sequence diagram: shows behaviour over time, the objects taking part in one scenario and the messages they send
+each other in order. It aims to show how the parts collaborate to complete a flow. For example, it can show the
+messages between the terminal, the payment service and the bank gateway when a payment is authorised.
+
+=== Question 4.3 ===
+#Answer below (paste a PlantUML/Mermaid sequence-diagram code block, or reference an image file committed to this repo)
+
+Image file: "4.3 seq diagram.png" (in the root of this repo). PlantUML source for the wiki:
+
+```plantuml
+@startuml
+title Failed capture and reversal - Payment Terminal Manager
+
+actor Customer
+participant Terminal
+participant PaymentService
+participant BankGateway
+
+Customer -> Terminal : 1: tapCard(card)
+activate Terminal
+
+Terminal -> PaymentService : 2: canAuthorise(terminal, request)
+PaymentService --> Terminal : 3: true
+
+Terminal -> BankGateway : 4: authorise(amountCents)
+BankGateway --> Terminal : 5: authorised(holdId)
+
+Terminal -> BankGateway : 6: capture(holdId)
+BankGateway --> Terminal : 7: captureFailed(error)
+
+note right of BankGateway : capture fails partway through
+
+Terminal -> PaymentService : 8: evaluateReversal(terminal, attempt)
+PaymentService --> Terminal : 9: ReversalResult(safe = true)
+
+Terminal -> BankGateway : 10: reverseAuthorisation(holdId)
+BankGateway --> Terminal : 11: reversalConfirmed
+
+Terminal --> Customer : 12: show "Payment cancelled - you were not charged"
+deactivate Terminal
+@enduml
+```
